@@ -224,7 +224,16 @@ All transcoding and stream processing settings are found in **Settings → Trans
 | Symptom | Likely Cause | Solution |
 |---------|--------------|----------|
 | No audio at all | Dolby/AC3/EAC3 audio | Enable **"Force Audio Transcode"** (overrides Auto detection) |
+| No audio on remuxed MPEG-TS streams with AAC audio | AAC decoder config missing from the MP4 header | Fixed: remux now converts AAC to MP4 format and delays the header until the config is known. Requires Auto Transcode, since Force Remux skips the probe that detects AAC |
+| Remux fails with `Malformed AAC bitstream detected` | MPEG-TS AAC muxed into MP4 without conversion | Same fix as above. Restart the server and reload the page |
 | Audio out of sync | Stream encoding issue | Try changing stream format to TS in Settings |
+
+### Windows Notes
+
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| `'wmic' is not recognized` at startup | WMIC is removed from recent Windows 11 builds | Fixed: GPU detection now uses PowerShell (`Get-CimInstance`) |
+| `EPERM: operation not permitted, rename ... db.json` | Another process (antivirus, indexer, editor) briefly holds `db.json` open | Database writes now retry automatically. If it persists, close `db.json` in editors or exclude the `data` folder from antivirus scanning |
 
 ### Buffering Issues
 

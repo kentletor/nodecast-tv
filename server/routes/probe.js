@@ -198,4 +198,17 @@ router.get('/', async (req, res) => {
     }
 });
 
+/**
+ * Look up a cached probe result for a URL (any User-Agent variant)
+ */
+function getCachedProbe(url) {
+    for (const [key, entry] of probeCache) {
+        if ((key === url || key.startsWith(`${url}|`)) && Date.now() - entry.timestamp < CACHE_TTL) {
+            return entry.result;
+        }
+    }
+    return null;
+}
+
 module.exports = router;
+module.exports.getCachedProbe = getCachedProbe;

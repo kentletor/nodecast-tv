@@ -105,6 +105,19 @@ function getUserAgent(settings) {
 let writeQueue = Promise.resolve();
 const tmpPath = dbPath + '.tmp';
 
+// On Windows, rename fails with EPERM/EBUSY/EACCES while another handle (a concurrent read,
+// antivirus, search indexer) has the target open. Retry briefly before giving up.
+async function renameWithRetry(from, to, attempts = 10) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fs.rename(from, to);
+    } catch (err) {
+      if (i >= attempts - 1 || !['EPERM', 'EBUSY', 'EACCES'].includes(err.code)) throw err;
+      await new Promise(resolve => setTimeout(resolve, 50 * (i + 1)));
+    }
+  }
+}
+
 async function saveDb(data) {
   // Queue this write operation - each write waits for the previous one
   writeQueue = writeQueue.then(async () => {
@@ -113,7 +126,7 @@ async function saveDb(data) {
       // Atomic write: write to temp file, then rename
       // Rename is atomic on most filesystems, preventing corruption on crash
       await fs.writeFile(tmpPath, jsonString);
-      await fs.rename(tmpPath, dbPath);
+      await renameWithRetry(tmpPath, dbPath);
     } catch (err) {
       console.error('Error writing database:', err);
       // Clean up temp file if it exists

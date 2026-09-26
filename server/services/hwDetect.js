@@ -16,6 +16,17 @@ const os = require('os');
 let hwCapabilities = null;
 
 /**
+ * List Windows video controller names.
+ * Uses PowerShell CIM since WMIC is removed from recent Windows 11 builds.
+ */
+function getWindowsGpuNames() {
+    return execSync(
+        'powershell -NoProfile -NonInteractive -Command "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"',
+        { timeout: 10000, encoding: 'utf-8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+}
+
+/**
  * NVIDIA GPU compute capability requirements for codec support
  * Source: https://developer.nvidia.com/video-encode-and-decode-gpu-support-matrix-new
  */
@@ -124,11 +135,8 @@ async function detectQuickSync() {
         let hasIntelGpu = false;
 
         if (os.platform() === 'win32') {
-            // Windows: Check via WMIC
-            const result = execSync(
-                'wmic path win32_VideoController get name',
-                { timeout: 5000, encoding: 'utf-8', windowsHide: true }
-            );
+            // Windows: Check via CIM
+            const result = getWindowsGpuNames();
             hasIntelGpu = result.toLowerCase().includes('intel');
         } else if (os.platform() === 'linux') {
             // Linux: Check lspci
@@ -172,11 +180,8 @@ async function detectAMF() {
     }
 
     try {
-        // Windows: Check via WMIC for AMD/Radeon
-        const result = execSync(
-            'wmic path win32_VideoController get name',
-            { timeout: 5000, encoding: 'utf-8', windowsHide: true }
-        );
+        // Windows: Check via CIM for AMD/Radeon
+        const result = getWindowsGpuNames();
 
         const lowerResult = result.toLowerCase();
         const hasAmdGpu = lowerResult.includes('amd') || lowerResult.includes('radeon');

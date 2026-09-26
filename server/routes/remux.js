@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { spawn } = require('child_process');
 const db = require('../db');
+const { getCachedProbe } = require('./probe');
 
 /**
  * Remux stream (container conversion only)
@@ -28,12 +29,15 @@ router.get('/', async (req, res) => {
     console.log(`[Remux] Starting remux for: ${url}`);
     console.log(`[Remux] Using User-Agent: ${settings.userAgentPreset}`);
 
+    // Use cached probe result (the player probes before remuxing) to pick the audio bitstream filter
+    const probe = getCachedProbe(url);
+    const isAac = probe?.audio === 'aac';
+
     // FFmpeg arguments for pure remux (no encoding)
     // Very lightweight - just changes container from TS to fragmented MP4
     const args = [
         '-hide_banner',
         '-loglevel', 'warning',
-        '-user_agent', userAgent,
         '-user_agent', userAgent,
         // Standard probe size to handle complex containers (MKV) correctly
         '-probesize', '5000000',
@@ -61,15 +65,17 @@ router.get('/', async (req, res) => {
         '-c', 'copy',
         // Ensure extradata is correctly extracted/converted (fixes Annex B -> AVCC issues in Firefox)
         '-bsf:v', 'dump_extra',
-        // NOTE: We intentionally do NOT use -bsf:a aac_adtstoasc here
-        // That filter only works for AAC audio and breaks AC3/EAC3/MP3.
-        // If AAC audio from MPEG-TS fails in MP4, use /api/transcode instead.
+        // NOTE: -bsf:a aac_adtstoasc is added below only when the probe says audio is AAC.
+        // That filter breaks AC3/EAC3/MP3, but MP4 rejects ADTS AAC (from MPEG-TS) without it.
+        ...(isAac ? ['-bsf:a', 'aac_adtstoasc'] : []),
         // Handle timestamp discontinuities at output
         '-fps_mode', 'passthrough',
         '-max_muxing_queue_size', '1024',
         // Fragmented MP4 for streaming (browser-compatible)
         '-f', 'mp4',
-        '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+        // delay_moov: wait for the first packets before writing the header so the AAC
+        // decoder config produced by aac_adtstoasc is included (otherwise browsers play silent)
+        '-movflags', 'frag_keyframe+empty_moov+default_base_moof+delay_moov',
         '-' // Output to stdout
     ];
 
